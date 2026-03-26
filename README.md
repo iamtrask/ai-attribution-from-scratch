@@ -1,12 +1,15 @@
-# AI Attribution from Scratch
+# Decentralized AI from Scratch
 
-**Let's build a citation engine.**
+There's a lot of hype around decentralized AI — federated learning, AI marketplaces, blockchain-for-ML. But all of it is stuck on two fundamental problems that nobody's solved at scale:
 
-A course on understanding which sources an LLM uses, from scratch, in code. We start with the addition problem and build up to a GPU-accelerated, differentially-private attribution engine running on state-of-the-art open-source models.
+**Attribution:** When an AI gives you an answer, which sources get credit?
+**Unlearning:** Can you choose whose information is used in a prediction?
 
-Conceptually, this course assumes you already know how LLMs work, roughly at the level of Karpathy's [Zero to Hero](https://karpathy.ai/zero-to-hero.html). In my opinion attribution is an excellent place to learn about differential privacy, even if your intention is to eventually go to other areas, because most of what you learn will be immediately transferable.
+Without attribution, you can't build a marketplace (who gets paid?). Without unlearning, you can't comply with data rights (the right to be forgotten). Together, they're the foundation of any system where multiple parties contribute to and negotiate over AI intelligence.
 
-Prerequisites: solid programming (Python), intro-level math (e.g. derivatives, linear algebra), and familiarity with how neural networks work (e.g. from Karpathy's series or equivalent).
+This course builds both from scratch, in code, starting with the addition problem — the fundamental reason these are hard. We assume you already know how LLMs work, roughly at the level of Karpathy's [Zero to Hero](https://karpathy.ai/zero-to-hero.html).
+
+Prerequisites: solid programming (Python), intro-level math (e.g. derivatives, linear algebra), and familiarity with how neural networks work.
 
 ---
 
