@@ -1,19 +1,38 @@
-# Lecture 1: What Is Attribution, Why Is It Hard?
+# Lecture 1: The Addition Problem
+
+## The Opening (before any code)
+
+Two lines that contain the entire course:
+
+```
+concatenation:  "1" + "6" = "16"    → you can see both parts
+addition:        1  +  6  =  7     → you can't un-add
+```
+
+When a neural network adds gradient updates into weights, it's doing addition. The source information is destroyed. Receiving 7 tells you nothing about whether it came from 1+6, 2+5, or 3+4. This is **the addition problem** — and it's the fundamental reason attribution is hard.
+
+See [attribution-based-control.ai](https://attribution-based-control.ai/) for the full treatment.
+
+Everything we build in this course is one of three responses to the addition problem:
+1. **Avoid addition** — keep sources separate (ensembles, concatenation)
+2. **Bound the damage** — you can't un-add, but you can bound how much any input contributed (Lipschitz bounds)
+3. **Add noise to mask it** — if you can't prevent mixing, guarantee it doesn't leak too much (differential privacy)
+
+This lecture shows all three in embryonic form.
 
 ## The Arc
 
-Four beats that take the student from "attribution is trivial" to "oh no, this is actually hard" to "wait, there's a way out":
+Five beats:
 
-1. **N-gram counts** — attribution is just looking up who voted. Trivial.
-2. **Perceptron** — attribution is input × weight. Still easy. Decomposable.
-3. **Logistic regression** — add a sigmoid and attribution breaks. The nonlinearity mixes sources. You can't decompose the output anymore. THIS is why attribution is hard.
-4. **LLM ensemble** — the escape hatch. Don't let sources mix inside the model. Give each source its own prompt. Vote. Attribution is back to counting. Easy again.
+1. **The addition problem** — explained with scalars, no code needed
+2. **N-gram counts** — attribution is just looking up who contributed. No addition involved — counts are stored separately per source. Trivial.
+3. **Perceptron** — output = Σ(input × weight). This IS addition, but a simple kind: you can decompose the sum back into parts because each part is input × weight.
+4. **Logistic regression** — wrap in σ(). Now σ(a + b) ≠ σ(a) + σ(b). The addition happened INSIDE a nonlinearity, and you can't decompose anymore. One sigmoid. That's all it takes.
+5. **LLM ensemble** — don't add. Keep sources in separate prompts. Each source gets processed independently. Attribution = counting. Easy again, but expensive.
 
-The lecture ends with the student holding two things in their head: (a) a hard problem they want to solve (attribution through nonlinearities), and (b) a working solution that sidesteps it (the ensemble). The rest of the course explores both paths.
+## Dataset
 
-## Datasets
-
-### The Hogwarts Headmaster Survey (Beats 1-3)
+### The Hogwarts Headmaster Survey
 
 1000 students share who they think the next headmaster should be. Students overwhelmingly prefer their own head of house, with realistic noise.
 
@@ -24,18 +43,13 @@ The lecture ends with the student holding two things in their head: (a) a hard p
 "My name is Luna Lovegood. As a member of Ravenclaw, I think the next headmaster should be Flitwick"
 ```
 
-Each response has a name, a house, and an opinion. It's a survey — just 1000 people sharing what they think. But when we train an n-gram model on it, we'll see that the model is secretly counting these opinions like votes. Attribution is about tracking whose influence got counted.
+Both structured data (name, house, candidate columns) and full sentences. 250 per house, 6 candidates, strong house loyalty with noise. See `corpus.py`.
 
-Both structured data (name, house, candidate columns) and full sentences available. 250 respondents per house, 6 candidates, strong house loyalty with noise. Known HP characters first, then generated wizard names. See `corpus.py`.
-
-### The Rooms Dataset (Beat 2 onward — the Shakespeare)
+### The Rooms Dataset (Beat 5, carried forward)
 
 ```
-Source 1: "The cat is in the kitchen. The kitchen is on the first floor."
-Source 2: "The dog is in the garden. The garden has a pond."
-Source 3: "The hamster is in the bedroom. The bedroom is upstairs."
-Source 4: "The bird is in the cage. The cage is by the window."
-Source 5: "The fish is in the pond. The pond is in the garden."
+"The cat is in the kitchen. The kitchen is on the first floor."
+"The hamster is in the bedroom. The bedroom is upstairs."
 ...10 sources
 ```
 
@@ -43,85 +57,80 @@ Verifiable ground truth. Multi-hop facts for Lecture 2. Carries the entire cours
 
 ## What the Student Builds
 
-### Beat 1: The n-gram model is secretly counting votes (~20 lines)
+### Beat 1: The addition problem (~0 lines, just markdown)
 
-- Train a bigram model on the 1000 survey responses
+- "1" + "6" = "16" → concatenation preserves sources
+- 1 + 6 = 7 → addition destroys them
+- "In neural networks, gradient updates are ADDED into weights. Every training step does addition. The source information is gone."
+- "This lecture will show you three places where this matters, and three ways to deal with it."
+
+### Beat 2: N-gram — no addition, perfect attribution (~20 lines)
+
+- Train a bigram model on the Hogwarts survey
 - Prompt: "the next headmaster should be"
-- The bigram table has counts — and we can trace each count to its source:
+- The bigram table stores counts PER SOURCE. No addition — it's concatenation/lookup.
   ```
   McGonagall  █████████████████ 268  (Gryffindor: 141, Hufflepuff: 44, ...)
-  Flitwick    ██████████████ 219     (Ravenclaw: 122, Gryffindor: 39, ...)
-  Sprout      ████████████ 196       (Hufflepuff: 134, Ravenclaw: 26, ...)
   Snape       ██████████ 166         (Slytherin: 135, Ravenclaw: 17, ...)
   ```
-- "The model predicted Snape. Whose influence got counted?" → read the table: 135 Slytherin, 17 Ravenclaw, 8 Hufflepuff, 6 Gryffindor.
-- **Lesson:** the n-gram model treats each training example as a vote. Attribution = tracking whose influence got counted.
-- **This is trivially easy.** Savor it.
+- "The model predicted Snape. Who influenced that?" → read the table. Trivial.
+- **Lesson:** n-grams avoid the addition problem. Each source's contribution is stored separately.
 
-### Beat 2: Perceptron — influence is still traceable (~30 lines)
+### Beat 3: Perceptron — addition, but decomposable (~30 lines)
 
-- Same survey data. Bag-of-words features per house. Predict: who becomes headmaster?
-- Single-layer perceptron (no activation). Train it with the perceptron update rule.
-- Output = Σ(house_i_input × weight). Perfectly decomposable.
-- Print per-house contributions. They sum to the output exactly.
-- "Slytherin's influence: 0.6 toward Snape. Ravenclaw: 0.15. Gryffindor: 0.05..."
-- **Lesson:** "Linear models are perfectly attributable. Each group's influence = its input × the weight."
-- **Still easy.** The output is a sum of influences. You can trace each one.
+- Same data. Bag-of-words features per house. Perceptron update rule (no activation).
+- Output = Σ(house_i × weight_i). This IS addition. But it's a LINEAR sum.
+- You can decompose: "Slytherin contributed 0.6, Ravenclaw contributed 0.15..."
+- The parts sum to the whole. Attribution works because addition of linear terms is reversible when you know the terms.
+- **Lesson:** linear addition is attributable. You can un-add a linear sum if you know the components.
 
-### Beat 3: Logistic regression — influence gets mixed (~30 lines)
+### Beat 4: Logistic regression — addition inside a nonlinearity (~30 lines)
 
-- Same model, same data. Add a sigmoid: output = σ(Σ(house_i_input × weight))
-- Try to decompose: the per-house influences no longer sum to the output. The sigmoid mixes them nonlinearly.
-- Show it concretely: Slytherin's influence is 2.0, Ravenclaw's is 1.0, but σ(3.0) ≠ σ(2.0) + σ(1.0). The nonlinearity creates interactions. You can't say "Slytherin was responsible for X% of the prediction."
-- **Lesson:** "One nonlinearity. That's all it takes. The influences get mixed, and you can't un-mix them."
-- **This is the crisis.** Every real model — MLPs, transformers, GPT-4 — is nonlinearities stacked on nonlinearities. If you can't trace influence through a single sigmoid, how do you trace it through a hundred layers of them?
+- Same model. Add sigmoid: output = σ(Σ(house_i × weight_i))
+- Slytherin contributes 2.0, Ravenclaw contributes 1.0.
+- σ(2.0 + 1.0) = σ(3.0) = 0.953
+- But σ(2.0) + σ(1.0) = 0.881 + 0.731 = 1.612
+- **0.953 ≠ 1.612.** The addition happened inside the sigmoid. You can't decompose.
+- "How much of the 0.953 came from Slytherin?" There is no clean answer.
+- **Lesson:** addition inside a nonlinearity is the addition problem. One sigmoid is enough. Deep networks have hundreds.
 
-### Beat 4: LLM ensemble — the escape (~40 lines)
+### Beat 5: LLM ensemble — avoid addition entirely (~40 lines)
 
-- "What if sources never mix inside the model?"
-- Switch to the rooms dataset. One model, N prompts. Each prompt has one source + the question.
-- The model processes each source INDEPENDENTLY. No mixing. No nonlinear interaction between sources.
-- Collect predictions. Count votes. Print colored inline HTML:
-
-```python
-from IPython.display import HTML
-html = ""
-for token, attr in zip(tokens, attributions):
-    color = COLORS[max(attr, key=attr.get)]
-    html += f'<span style="border-bottom:3px solid {color};padding:2px">{token}</span> '
-display(HTML(html))
-```
-
-- Works with any model — local GPT-2, API calls, anything.
-- **Lesson:** "Attribution is hard because sources mix. The ensemble prevents mixing. Attribution is easy again."
-- **But:** you're running the model N times. And the model can't cross-reference sources. There's a cost.
+- Switch to the rooms dataset. One model, N prompts.
+- Each source processed INDEPENDENTLY. The model never adds source A's representation to source B's. No mixing. No addition problem.
+- Colored inline HTML showing attribution.
+- **Lesson:** the ensemble solves the addition problem by not adding. Like concatenation instead of addition. But it costs N forward passes.
 
 ## The Artifact
 
-**Notebook:** `lecture_01.ipynb` — ~120 lines of code across 4 beats. Inline colored HTML. Zero dependencies beyond numpy + a model.
-**Script:** `lecture_01.py` — prints colored text to terminal.
+**Notebook:** `lecture_01.ipynb` — ~120 lines of code. Opens with the addition problem (markdown), ends with colored attribution text.
+**Script:** `lecture_01.py`
 
 ## Key Ideas
 
-1. **Attribution is easy when sources don't mix.** N-grams (counting), perceptrons (linear decomposition), ensembles (separate prompts).
-2. **Attribution is hard when sources DO mix.** One sigmoid is enough to break it. Deep networks are hundreds of nonlinearities deep.
-3. **The ensemble sidesteps the problem** by preventing sources from mixing. It works, but costs N forward passes and can't cross-reference sources.
-4. **Two open problems for the rest of the course:**
-   - **Ensemble path (Lectures 2-3):** Can we make the ensemble smarter (weighted votes) and private (noisy votes)?
-   - **Single-model path (Lectures 4-5):** Can we do attribution THROUGH the nonlinearities? (Lipschitz bounds, differential privacy)
+1. **The addition problem:** addition destroys source information. concatenation preserves it.
+2. **N-grams avoid it** (counts stored separately)
+3. **Linear addition is reversible** (you can decompose a sum if you know the terms)
+4. **Nonlinear addition is not** (σ(a+b) ≠ σ(a) + σ(b))
+5. **Ensembles avoid it** (sources never mix)
+6. **The rest of the course:**
+   - Lecture 2: microcredit — a scalar engine for tracking influence through operations (including nonlinear ones)
+   - Lectures 3-4: make the ensemble smarter and private
+   - Lectures 5-6: bound and mask the addition problem inside a single model
 
 ## Assets Produced (for Lecture 2)
 
-- `corpus.py` — the rooms dataset (10 sources with multi-hop facts)
-- The ensemble voting function (one model, N prompts)
-- The inline HTML rendering pattern
-- The trained perceptron + logistic regression (reused in Lecture 4 as the simple case for Lipschitz bounds)
-- The student's understanding: attribution is easy without mixing, hard with mixing
+- `corpus.py` — Hogwarts dataset + rooms dataset
+- The ensemble voting function
+- Inline HTML rendering
+- The perceptron + logistic regression (reused in microcredit and Lecture 5)
+- **The student's understanding:** attribution = the addition problem. Everything is about avoiding, bounding, or masking addition.
 
 ## Pacing
 
-- Beat 1: 5 minutes. "This is easy."
-- Beat 2: 5 minutes. "Still easy."
-- Beat 3: 10 minutes. "Oh no." (The σ(a+b) ≠ σ(a)+σ(b) demo is the key moment.)
-- Beat 4: 10 minutes. "Oh wait, there's a trick." (Relief, but partial — the cost and limitations are real.)
-- Total: ~30 minutes of code. The rest is markdown explanation between cells.
+- Beat 1: 3 minutes. The two-line demo. Sets the frame for the whole course.
+- Beat 2: 5 minutes. "N-grams don't have this problem."
+- Beat 3: 5 minutes. "Linear addition is fine."
+- Beat 4: 10 minutes. "One sigmoid. That's all it takes." (σ(a+b) ≠ σ(a)+σ(b) is THE moment.)
+- Beat 5: 10 minutes. "Don't add. Keep sources separate."
+- Total: ~30 minutes of code.
